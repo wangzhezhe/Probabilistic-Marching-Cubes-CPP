@@ -9,8 +9,8 @@
 #include <omp.h>
 #include <vector>
 
-// on summit we use 42 threads for testing
-const int NUM_THREADS = 42;
+// on summit we use 21 threads for testing
+const int NUM_THREADS = 8;
 
 // Function to find mean.
 double find_mean(std::vector<double> &arr, int &n)
@@ -31,7 +31,7 @@ double find_covariance(std::vector<double> &arr1, std::vector<double> &arr2, int
     return sum / (double)(n - 1);
 }
 
-double pms(Eigen::EigenMultivariateNormal<double> &normX_solver, double &isovalue, int &num_samples, double &find_crossing_time)
+double pms(Eigen::EigenMultivariateNormal<double> &normX_solver, double &isovalue, int &num_samples, double &find_crossing_time, int debug)
 {
     // Eigen::setNbThreads(10);
     // Eigen::Matrix<double, Eigen::Dynamic, -1> R;
@@ -50,6 +50,11 @@ double pms(Eigen::EigenMultivariateNormal<double> &normX_solver, double &isovalu
     int numCrossings = 0;
     for (int n = 0; n < num_samples; ++n)
     {
+        if (debug == 1 && n == 0)
+        {
+            std::cout << "check r" << std::endl;
+            std::cout << R.coeff(0, 0) << " " << R.coeff(0, 1) << " " << R.coeff(0, 2) << " " << R.coeff(0, 3) << std::endl;
+        }
         if ((isovalue <= R.coeff(n, 0)) && (isovalue <= R.coeff(n, 1)) && (isovalue <= R.coeff(n, 2)) && (isovalue <= R.coeff(n, 3)))
         {
             numCrossings = numCrossings + 0;
@@ -85,7 +90,7 @@ void cov_matrix(std::vector<std::vector<double>> &data, int &size_x, int &size_y
     auto sample_prob_time = 0;
     double sample_time = 0;
     double find_crossing_time = 0;
-    std::vector<double> probs;
+    std::vector<double> probs((size_x-1)*(size_y-1),0);
     Eigen::initParallel();
     omp_set_dynamic(0);
     // for summit, we use the 42 thread for testing
@@ -142,7 +147,10 @@ void cov_matrix(std::vector<std::vector<double>> &data, int &size_x, int &size_y
             // generate mean and cov matrix
             Eigen::Vector4d mean;
             mean << mean_0, mean_1, mean_2, mean_3;
-            //std::cout << "mean " << mean_0 << "," << mean_1 << "," << mean_2 << "," << mean_3 << std::endl;
+            if (i == 0 && j == 0)
+            {
+                std::cout << "mean " << mean_0 << "," << mean_1 << "," << mean_2 << "," << mean_3 << std::endl;
+            }
 
             std::vector<float> cov_matrix;
             for (int p = 0; p < 4; ++p)
@@ -151,7 +159,11 @@ void cov_matrix(std::vector<std::vector<double>> &data, int &size_x, int &size_y
                 {
                     float cov = find_covariance(d[p], d[q], num_members, mean[p], mean[q]);
                     cov_matrix.push_back(cov);
-                    //std::cout << p << "," << q << " " << cov << std::endl;
+                    // std::cout << p << "," << q << " " << cov << std::endl;
+                    if (i == 0 && j == 0)
+                    {
+                        std::cout << cov << std::endl;
+                    }
                 }
             }
             Eigen::Matrix4d covar;
@@ -162,20 +174,29 @@ void cov_matrix(std::vector<std::vector<double>> &data, int &size_x, int &size_y
 
             Eigen::EigenMultivariateNormal<double> normX_solver(mean, covar);
 
-            //auto start = std::chrono::high_resolution_clock::now();
-            double p = pms(normX_solver, isovalue, num_samples, find_crossing_time);
-            //auto end = std::chrono::high_resolution_clock::now();
-            //auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-            //sample_prob_time = sample_prob_time + duration.count();
+            // auto start = std::chrono::high_resolution_clock::now();
+            int debug = 0;
+            if (i == 0 && j == 0)
+            {
+                debug = 1;
+            }
+            double p = pms(normX_solver, isovalue, num_samples, find_crossing_time, debug);
+            // auto end = std::chrono::high_resolution_clock::now();
+            // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+            // sample_prob_time = sample_prob_time + duration.count();
             // std::cout << "Sample Prob Time: " << duration.count() << "\n";
-            probs.push_back(p);
+            
+            //#pragma omp critical
+            #pragma omp atomic write
+            probs[j*(size_y-1)+i] = p;
+            
         }
     }
 
-    // });
-    /*
-    // this operation only works for non-parallel output for testing the results
-    // without using the openmp
+// do not add this when doing the performance test
+#pragma omp barrier
+#pragma omp critical 
+{
     std::ofstream myfile;
     myfile.open("prob_wind.txt");
     std::cout << "size of prob_wind " << probs.size() << std::endl;
@@ -192,18 +213,18 @@ void cov_matrix(std::vector<std::vector<double>> &data, int &size_x, int &size_y
         }
     }
     myfile.close();
-    */
+}
 
-    // Debug:
-    // float min_val = *std::min_element(probs.begin(), probs.end());
-    // float max_val = *std::max_element(probs.begin(), probs.end());
-    // std::cout << "Min: " << min_val << "\n";
-    // std::cout << "Max: " << max_val << "\n";
-    // std::cout << "Find Data Cell Time: " << find_data_time << "\n";
-    // std::cout << "Calculate Mean Time: " << cal_mean_time << "\n";
-    // std::cout << "Calculate Cov Time: " << cal_cov_time << "\n";
-    // std::cout << "Get Solver Time: " << get_solver_time << "\n";
-    //std::cout << "Sample Prob Time: " << sample_prob_time << "\n";
-    //std::cout << "sample time: " << sample_time << "\n";
-    //std::cout << "find crossing time: " << find_crossing_time << "\n";
+// Debug:
+// float min_val = *std::min_element(probs.begin(), probs.end());
+// float max_val = *std::max_element(probs.begin(), probs.end());
+// std::cout << "Min: " << min_val << "\n";
+// std::cout << "Max: " << max_val << "\n";
+// std::cout << "Find Data Cell Time: " << find_data_time << "\n";
+// std::cout << "Calculate Mean Time: " << cal_mean_time << "\n";
+// std::cout << "Calculate Cov Time: " << cal_cov_time << "\n";
+// std::cout << "Get Solver Time: " << get_solver_time << "\n";
+// std::cout << "Sample Prob Time: " << sample_prob_time << "\n";
+// std::cout << "sample time: " << sample_time << "\n";
+// std::cout << "find crossing time: " << find_crossing_time << "\n";
 }

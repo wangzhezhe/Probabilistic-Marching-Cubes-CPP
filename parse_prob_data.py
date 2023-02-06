@@ -45,9 +45,9 @@ if __name__ == "__main__":
     # the default array name is unknown
 
     vtkarray = numpy_support.numpy_to_vtk(numpyarray)
-    vtkarray.SetName("cros_prob")
+    vtkarray.SetName("cross_prob")
 
     print(vtkarray)
    
     structured_dataset.GetCellData().AddArray(vtkarray)
-    writeStructuredDs("wind_cros_prob.vtk",structured_dataset)
+    writeStructuredDs("wind_cross_prob.vtk",structured_dataset)

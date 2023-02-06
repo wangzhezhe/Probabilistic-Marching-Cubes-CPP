@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 
     int num_members = 15;
     int num_samples = 1000;
-    double isovalue = 0.2;
+    double isovalue = 0.3;
     int size_x = 121;
     int size_y = 240;
 
