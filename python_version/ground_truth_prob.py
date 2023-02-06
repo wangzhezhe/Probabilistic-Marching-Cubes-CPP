@@ -7,7 +7,19 @@ import matplotlib.pyplot as plt
 from pms import pmsMultivariateGaussian
 # import multiprocessing as mp
 from joblib import Parallel, delayed
+import glob
 
+def load_txt_data(dir):
+    path = dir+"Lead_33_*.txt"
+    print("data file path: ", path)
+    data_ensembles=[]
+    for filename in glob.glob(path):
+        data = np.loadtxt(filename)
+        data_ensembles.append(data)   
+    return np.array(data_ensembles)
+# for data, the first dim is all ensembels
+# the second dim is x
+# the third dim is y
 def calulation(i, data, isovalue, size_y):
     ## d0, d1, d2, d3 are data at the four vertices
     # d0 = data[:, x, y]
@@ -29,14 +41,15 @@ def calulation(i, data, isovalue, size_y):
 
 def gen_ground_truth(isovalue, data, size_x, size_y):
     max_index = size_y * (size_x - 1 - 1) + (size_y - 1 - 1)
-    print(size_x, size_y, max_index, data.shape[1])
+    print(size_x, size_y, max_index, size_x)
     # temp = Parallel(n_jobs=1, backend="multiprocessing")(
     #     delayed(calulation)(x, y, data, isovalue) for y in range(size_y - 1) for x in range(size_x - 1)
     # )
-    temp = Parallel(n_jobs=-1, backend="multiprocessing")(
+    temp = Parallel(n_jobs=8, backend="multiprocessing")(
         delayed(calulation)(i, data, isovalue, size_y) for i in range(max_index+1) if (i % size_y) != (size_y -1)
     )
     temp = np.array(temp)
+
     gt = np.reshape(temp, (120, 239), order='F')
     # for y in range(size_y - 1):
     #     for x in range(size_x - 1):
@@ -57,23 +70,23 @@ def gen_ground_truth(isovalue, data, size_x, size_y):
 if __name__ == '__main__':
     # print("Number of processors: ", mp.cpu_count())
     # pool = mp.Pool(mp.cpu_count())
-    data_dir = "../datasets/wind_pressure_200/Lead_33.npy"
+    # data_dir = "../datasets/wind_pressure_200/Lead_33.npy"
     isovalue = 0.2
 
-    data = np.load(data_dir)
+    #data = np.load(data_dir)
+    data_dir = "../datasets/txt_files/wind_pressure_200/"
+    data = load_txt_data(data_dir)
+    xdim=121
+    ydim=240
     new_data = []
     for d in data:
         new_data.append(d.flatten())
     start_time = time.time() 
-    gt = gen_ground_truth(isovalue, np.array(new_data), data.shape[1], data.shape[2])
+    #print(new_data)
+    gt = gen_ground_truth(isovalue, np.array(new_data), xdim, ydim)
     print("gt min max: ", np.min(gt), np.max(gt))
     end_time = time.time()
     print("runtime: ", end_time - start_time)
-
-
-
-
-
 
 
     # pool.close()
